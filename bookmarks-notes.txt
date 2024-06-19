@@ -1,0 +1,110 @@
+
+# echo 'select url from moz_bookmarks, moz_places where moz_places.id=moz_bookmarks.fk;' | sqlite3 /home/a/.mozilla/firefox/2atgfyyq.default/places.sqlite | grep http > /tmp/firefox.bookmarks
+
+
+# echo 'select url from moz_bookmarks, moz_places where moz_places.id=moz_bookmarks.fk;' | sqlite3 ~/.mozilla/firefox/uv8hiz4p.default-release/places.sqlite  # list all
+# echo 'select moz_bookmarks.title from moz_bookmarks, moz_places where moz_places.id=moz_bookmarks.fk and moz_places.url like "%ycombinator%";' | sqlite3 -list /tmp/places.sqlite | grep -i svg  # search "svg" in title of all bookmarks with ycombinator in url
+
+
+"""
+sqlite> attach "/tmp/places.sqlite" as db1;
+
+sqlite> .tables
+db1.moz_anno_attributes                 db1.moz_keywords                      
+db1.moz_annos                           db1.moz_meta                          
+db1.moz_bookmarks                       db1.moz_origins                       
+db1.moz_bookmarks_deleted               db1.moz_places                        
+db1.moz_historyvisits                   db1.moz_places_extra                  
+db1.moz_historyvisits_extra             db1.moz_places_metadata               
+db1.moz_inputhistory                    db1.moz_places_metadata_search_queries
+db1.moz_items_annos                     db1.moz_previews_tombstones
+
+sqlite> select count(*) from moz_bookmarks;
+count(
+------
+2416  
+
+
+sqlite> pragma table_info(moz_bookmarks);
+cid     name                            type        notnull     dflt_value  pk        
+------  ------------------------------  ----------  ----------  ----------  ----------
+0       id                              INTEGER     0                       1         
+1       type                            INTEGER     0                       0         
+2       fk                              INTEGER     0           NULL        0         
+3       parent                          INTEGER     0                       0         
+4       position                        INTEGER     0                       0         
+5       title                           LONGVARCHA  0                       0         
+6       keyword_id                      INTEGER     0                       0         
+7       folder_type                     TEXT        0                       0         
+8       dateAdded                       INTEGER     0                       0         
+9       lastModified                    INTEGER     0                       0         
+10      guid                            TEXT        0                       0         
+11      syncStatus                      INTEGER     1           0           0         
+12      syncChangeCounter               INTEGER     1           1           0         
+
+sqlite> select * from moz_bookmarks limit 20;
+id      type    fk      parent  position  title                           keyword_id  folder_type  dateAdded         lastModified      guid          syncStatus  syncChangeCounter
+------  ------  ------  ------  --------  ------------------------------  ----------  -----------  ----------------  ----------------  ------------  ----------  -----------------
+1       2               0       0                                                                  1594596473529000  1709993370887000  root________  2           1                
+2       2               1       0         menu                                                     1594596473529000  1648486160313000  menu________  2           0                
+3       2               1       1         toolbar                                                  1594596473529000  1709993370887000  toolbar_____  2           0                
+4       2               1       2         tags                                                     1594596473529000  1594596473529000  tags________  2           1                
+5       2               1       3         unfiled                                                  1594596473529000  1696829830017000  unfiled_____  2           0                
+6       2               1       4         mobile                                                   1594596473535000  1594596473712000  mobile______  2           0                
+7       2               2       0         Mozilla Firefox                                          1482793561492000  1664397737000000  wO2b7QBZCJ9F  2           0                
+8       1       1       7       4         Help and Tutorials                                       1507580562124000  1672807266000000  pcQp9DV6SiFZ  2           0                
+9       1       2       7       5         Customize Firefox                                        1559486368393000  1672807266000000  hk-SrxTD_AUJ  2           0                
+10      1       3       7       6         Get Involved                                             1482793561495000  1672807266000000  gj5EtpnlRhle  2           0                
+11      1       4       7       7         About Us                                                 1482793561496000  1672807266000000  qhTomIpIOQBb  2           0                
+12      2               2       3         Ubuntu and Free Software links                           1507580562136000  1601746011000000  _oRTxsdac1NA  2           0                
+13      1       5       12      0         Ubuntu                                                   1507580562138000  1596302909000000  qeV6ZMB22YUI  2           0                
+14      1       6       12      1         Ubuntu Wiki (community-edited                            1507580562142000  1596302909000000  jUAeqsvHw8Ps  2           0                
+15      1       7       12      2         Make a Support Request to the                            1507580562145000  1596302909000000  YrdRuf-j2TIm  2           0                
+16      1       8       12      3         Debian (Ubuntu is based on Deb                           1507580562148000  1596302909000000  qH6dd1N7mqq-  2           0                
+18      1       89      2       1         Recent Tags                                              1482793561533000  1601746011000000  3Rne3ugQq7kw  2           0                
+19      3               2       2                                                                  1482793561559000  1601746011000000  ZO96IqyQHEQW  2           0                
+20      2               722     5         2018-06-29                                               1530308244006000  1696828959624000  0HeqaZ7b_hB9  2           0                
+21      1       216     20      0         See Sound Waves Using Colored                            1530308244006000  1594753419000000  GhHCdT7LGEJE  2           0      
+
+sqlite> pragma table_info(moz_places);
+cid     name                            type        notnul  dflt_val  pk                            
+------  ------------------------------  ----------  ------  --------  ------------------------------
+0       id                              INTEGER     0                 1                             
+1       url                             LONGVARCHA  0                 0                             
+2       title                           LONGVARCHA  0                 0                             
+3       rev_host                        LONGVARCHA  0                 0                             
+4       visit_count                     INTEGER     0       0         0                             
+5       hidden                          INTEGER     1       0         0                             
+6       typed                           INTEGER     1       0         0                             
+7       frecency                        INTEGER     1       -1        0                             
+8       last_visit_date                 INTEGER     0                 0                             
+9       guid                            TEXT        0                 0                             
+10      foreign_count                   INTEGER     1       0         0                             
+11      url_hash                        INTEGER     1       0         0                             
+12      description                     TEXT        0                 0                             
+13      preview_image_url               TEXT        0                 0                             
+14      origin_id                       INTEGER     0                 0                             
+15      site_name                       TEXT        0                 0                             
+16      recalc_frecency                 INTEGER     1       0         0                             
+17      alt_frecency                    INTEGER     0                 0                             
+18      recalc_alt_frecency             INTEGER     1       0         0 
+
+
+sqlite> pragma table_info(moz_places_metadata);
+cid     name                            type        notnull     dflt_value  pk        
+------  ------------------------------  ----------  ----------  ----------  ----------
+0       id                              INTEGER     0                       1         
+1       place_id                        INTEGER     1                       0         
+2       referrer_place_id               INTEGER     0                       0         
+3       created_at                      INTEGER     1           0           0         
+4       updated_at                      INTEGER     1           0           0         
+5       total_view_time                 INTEGER     1           0           0         
+6       typing_time                     INTEGER     1           0           0         
+7       key_presses                     INTEGER     1           0           0         
+8       scrolling_time                  INTEGER     1           0           0         
+9       scrolling_distance              INTEGER     1           0           0         
+10      document_type                   INTEGER     1           0           0         
+11      search_query_id                 INTEGER     0                       0    
+
+
+"""
