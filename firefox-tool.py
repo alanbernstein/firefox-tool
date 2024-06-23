@@ -145,7 +145,7 @@ class FirefoxProfile(object):
             if device_name_pattern and device_name_pattern not in device_name.lower():
                 print('')
                 print('omitting tabs from "%s"' % device_name)
-                return
+                continue
             print('')
             print('## %s (%s)' % (device_name, now_str))
             tabs = data['tabs']
@@ -160,9 +160,9 @@ class FirefoxProfile(object):
                 last_used_ts = tab['lastUsed']
                 last_used_time = datetime.datetime.fromtimestamp(last_used_ts)
                 last_used_time_str = datetime.datetime.strftime(last_used_time, time_fmt)
-                last_used_delta = datetime.datetime.now() - last_used_time
+                last_used_delta = now - last_used_time
 
-                line = '[%s](%s) (%s)' % (tab['title'], url, last_used_delta)
+                line = '[%s](%s) (%s days)' % (tab['title'], url, last_used_delta.days)
                 if overflow_mode == 'truncate':
                     if len(line) > W:
                         line = line[:W-3] + '...'
