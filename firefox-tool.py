@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from collections import defaultdict
 import datetime
 import json
 import os
@@ -42,12 +43,18 @@ def main():
         p.print_synced_tabs_markdown(pattern)
     if sys.argv[1] == 'bookmarks':
         p.print_bookmarks()
+    if sys.argv[1] == 'bookmarks-tree':
+        p.print_bookmarks_tree()
+    if sys.argv[1] == 'history':
+        print('not yet implemented')
+    if sys.argv[1] == 'search':
+        print('not yet implemented')
     if sys.argv[1] in ['profile-path', 'profile']:
         print(p.get_profile_path())
 
 def print_usage():
     print("""firefox-tool
-recommended alias: ff
+suggested alias: ff
 
 usage:
 
@@ -55,6 +62,9 @@ ff tabs
 ff tabs-history
 ff tabs-synced [device-name-pattern]
 ff bookmarks
+ff bookmarks-tree
+ff history
+ff search
 ff profile-path""")
 
 class FirefoxProfile(object):
@@ -116,6 +126,106 @@ class FirefoxProfile(object):
         rows = cursor.fetchall()
         for row in rows:
             print(row)
+
+    def print_bookmarks_tree(self):
+        cursor = self.places_connection.cursor()
+
+        sql1 = "select id, url, title from moz_places"
+        cursor.execute(sql1)
+        self.places_rows = cursor.fetchall()
+        self.places_rows_by_id = {r[0]: r for r in self.places_rows}
+
+        sql2 = "select id, type, fk, parent, title from moz_bookmarks"
+        cursor.execute(sql2)
+        self.bookmarks_rows = cursor.fetchall()
+        self.bookmarks_rows_by_id = {r[0]: r for r in self.bookmarks_rows}
+
+        branch_node_rows = [r for r in self.bookmarks_rows if r[1] == 2]
+
+        #for row in branch_node_rows[:30]:
+        #    print(row)
+
+        self.parent_to_children = defaultdict(list)
+        for row in self.bookmarks_rows:
+            self.parent_to_children[row[3]].append(row[0])
+
+        self.recurse_bookmarks_tree(1)
+
+    def recurse_bookmarks_tree(self, node_id, depth=0):
+        if node_id in self.bookmarks_rows_by_id:
+            row = self.bookmarks_rows_by_id[node_id]
+        else:
+            print('index error : %s' % node_id)
+            return
+
+        id_ = row[0]
+        typ = row[1]
+        fk = row[2]
+        parent = row[3]
+        title = row[4]
+        if fk in self.places_rows_by_id:
+            # leaf node with an associated url
+            url = self.places_rows_by_id[fk][1]
+            # print('%s(%s %s)%s (%s)' % (' ' * depth, id_, typ, title, url))
+            #print('[%s](%s)' % (title, url))  # markdown, nested sections
+            print('%s- [%s](%s)' % ('  ' * depth, title, url)) # markdown, nested list
+        else:
+            # print('%s(%s %s)%s' % (' ' * depth, id_, typ, title))
+            # print('%s %s' % ('#' * depth, title)) # markdown, nested sections
+            print('%s- %s' % ('  ' * depth, title)) # markdown, nested list
+            if node_id in self.parent_to_children:
+                for c in self.parent_to_children[node_id]:
+                    self.recurse_bookmarks_tree(c, depth+1)
+
+
+    def inspect_bookmarks_tree(self):
+        cursor = self.places_connection.cursor()
+
+        sql2 = "select id, type, fk, parent, title from moz_bookmarks"
+        cursor.execute(sql2)
+        rows = cursor.fetchall()
+
+        parent_to_children = defaultdict(list)
+        for row in rows:
+            parent_to_children[row[3]].append(row[0])
+
+        parents = parent_to_children.keys()
+        for branch_node_id in sorted(parents)[:30]:
+            fk = rows[branch_node_id][2]
+            parent = rows[branch_node_id][3]
+            title = rows[branch_node_id][4]
+            print('%d: fk: %s, parent: %s, title: %s' % (branch_node_id, fk, parent, title))
+            print('  children: %s' % (parent_to_children[branch_node_id]))
+
+
+        db()
+
+        # cursor.execute('select * from moz_bookmarks, moz_places where moz_places.id=moz_bookmarks.fk;')
+        # SELECT moz_places.id, moz_places.url, moz_places.title, moz_bookmarks.parent FROM moz_places LEFT OUTER JOIN moz_bookmarks N moz_places.id = moz_bookmarks.fk WHERE moz_bookmarks.parent = N
+        sql = ('SELECT moz_places.id, moz_places.url, moz_places.title, moz_bookmarks.parent'
+               'FROM moz_places'
+               'LEFT OUTER JOIN moz_bookmarks'
+               'N moz_places.id = moz_bookmarks.fk'
+               'WHERE moz_bookmarks.parent = N')
+
+        sql1 = ("select moz_places.title, dateAdded, url"
+                "from moz_bookmarks, moz_places"
+                "where moz_places.id=moz_bookmarks.fk")
+        sql1 = "select moz_places.id, fk, parent, moz_places.title, dateAdded, url from moz_bookmarks, moz_places where moz_places.id=moz_bookmarks.fk"
+
+        cursor.execute(sql1)
+        rows = cursor.fetchall()
+
+        for row in rows:
+            print(row)
+
+        
+
+    def print_bookmarks_tree_html(self):
+        # print tree structure of bookmark folders to an html file
+        # each level is show/hide-able
+        # search box that searches all urls and titles, and hides non-match branches
+        pass
 
     def print_synced_tabs_markdown(self, device_name_pattern):
         cursor = self.sync_connection.cursor()
