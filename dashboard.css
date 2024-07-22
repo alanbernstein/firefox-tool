@@ -1,0 +1,23 @@
+body {
+    color: #ccc;
+    background-color: #222;
+    font-family: arial, sans-serif;
+    max-width: 50rem;
+    padding: 2rem;
+    margin: auto;
+}
+
+a {
+    color: #55c;
+}
+
+a:visited {
+    color: #c5c;
+}
+
+.folder {
+    border-left: 1px solid white;
+    margin-left: 1em;
+    padding: 2px;
+    padding-left: 0.5em
+}

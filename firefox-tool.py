@@ -7,6 +7,7 @@ import platform
 import shutil
 import sys
 
+import jinja2
 import lz4.block  # pip install lz4 --user
 import sqlite3
 
@@ -33,14 +34,14 @@ def main():
     p = FirefoxProfile()
 
     if sys.argv[1] == 'tabs':
-        p.print_session_md()
+        p.print_session()
     if sys.argv[1] == 'tabs-history':
         p.print_session_history()
     if sys.argv[1] in ['tabs-synced', 'synced-tabs', 'synced']:
         pattern = None
         if len(sys.argv) > 2:
             pattern = sys.argv[2]
-        p.print_synced_tabs_md(pattern)
+        p.print_synced_tabs(pattern, format='md')
     if sys.argv[1] == 'bookmarks':
         p.print_bookmarks()
     if sys.argv[1] == 'bookmarks-tree':
@@ -52,7 +53,7 @@ def main():
     if sys.argv[1] in ['profile-path', 'profile']:
         print(p.get_profile_path())
     if sys.argv[1] in ['render']:
-        p.render_search_page()
+        p.render_dashboard()
 
 def print_usage():
     print("""firefox-tool
@@ -65,8 +66,7 @@ ff tabs-history
 ff tabs-synced [device-name-pattern]
 ff bookmarks
 ff bookmarks-tree
-ff history
-ff search
+ff render
 ff profile-path""")
 
 class FirefoxProfile(object):
@@ -132,7 +132,7 @@ class FirefoxProfile(object):
         self.places_rows = cursor.fetchall()
         self.places_rows_by_id = {r[0]: {k: v for k, v in zip(field_list, r)} for r in self.places_rows}
 
-        field_list = ['id', 'type', 'fk', 'parent', 'title']
+        field_list = ['id', 'type', 'fk', 'parent', 'title', 'position']
         fields = ', '.join(field_list)
         sql = 'select %s from moz_bookmarks' % fields
         cursor.execute(sql)
@@ -177,21 +177,31 @@ class FirefoxProfile(object):
         for row in branch_node_rows[:30]:
             print(row)
 
-    def print_bookmarks_tree(self):
+    def print_bookmarks_tree(self, filename=None, format=None):
+        format = format or 'html'
+        
         ROOT_NODE_ID = 1
         self.parent_to_children = defaultdict(list)
         for id, row in self.bookmarks_rows_by_id.items():
             self.parent_to_children[row['parent']].append(row['id'])
         
-        self.recurse_bookmarks_tree_mdlist(ROOT_NODE_ID)
-        #self.recurse_bookmarks_tree_mddoc(ROOT_NODE_ID)
+        if format == 'md':
+            self.recurse_bookmarks_tree_mdlist(ROOT_NODE_ID)
+        elif format == 'mddoc':
+            self.recurse_bookmarks_tree_mddoc(ROOT_NODE_ID)
+        elif format == 'html':
+            if filename:
+                os.remove(filename) # delete it here since all further writes must be in append mode
+            self.recurse_bookmarks_tree_html(ROOT_NODE_ID, filename=filename)
 
     def recurse_bookmarks_tree_mdlist(self, node_id, depth=0):
         row = self.bookmarks_rows_by_id[node_id]
 
         if row['fk'] in self.places_rows_by_id:
             url = self.places_rows_by_id[row['fk']]['url']
-            print('%s- [%s](%s)' % ('  ' * depth, row['title'], url))
+
+            line = '%s- [%s](%s)' % ('  ' * depth, row['title'], url)
+            print(line)
         else:
             print('%s- %s' % ('  ' * depth, row['title']))
             if node_id in self.parent_to_children:
@@ -209,8 +219,38 @@ class FirefoxProfile(object):
             if node_id in self.parent_to_children:
                 for c in self.parent_to_children[node_id]:
                     self.recurse_bookmarks_tree_mddoc(c, depth+1)
+
+    def recurse_bookmarks_tree_html(self, node_id, depth=0, filename=None):
+        row = self.bookmarks_rows_by_id[node_id]
+        f = None if not filename else open(filename, 'a')
+
+        #db()
+        if row['fk'] in self.places_rows_by_id:
+        #if row['type'] == 1
+            url = self.places_rows_by_id[row['fk']]['url']
+            write(f, '%s<a href="%s">%s</a><br>' % ('  ' * depth, url, row['title']))
+        else:
+            if node_id in self.parent_to_children:
+            # if row['type'] == 2
+                title = row['title']
+                if node_id == 1:
+                    title = "[root]"
+                state = ''
+                if title in ['toolbar', '[root]']:
+                    state = 'open '
+                # TODO: html escape
+                write(f, '%s<details %sclass="folder"><summary class="folder-title">📁 %s</summary>' % ('  ' * (depth-1), state, title))
+
+                child_ids = self.parent_to_children[node_id]
+                child_ids.sort(key=lambda x: self.bookmarks_rows_by_id[x]['position'])
+                for c in child_ids:
+                    self.recurse_bookmarks_tree_html(c, depth+1, filename)
+                write(f, '%s</details>' % ('  ' * depth))
+
+    def print_synced_tabs(self, device_name_pattern=None, filename=None, format=None):
+        format = format or 'md'
+        f = None if not filename else open(filename, 'w')
         
-    def print_synced_tabs_md(self, device_name_pattern):
         print(self.last_sync_str)
         for row in self.tab_rows:
             id, record, last_modified = row
@@ -220,8 +260,12 @@ class FirefoxProfile(object):
                 print('')
                 print('omitting tabs from "%s"' % device_name)
                 continue
-            print('')
-            print('## %s (%s)' % (device_name, now_str))
+            if format == 'md':
+                print('')
+                print('## %s (%s)' % (device_name, now_str))
+            elif format == 'html':
+                write(f, '<h3>%s (%s tabs)</h3>' % (device_name, len(data['tabs'])))
+                
             tabs = data['tabs']
             # these seem to be listed in ascending age, oldest at the bottom
             # this is what i would normally want, so no need to sort
@@ -237,24 +281,42 @@ class FirefoxProfile(object):
                 last_used_time_str = datetime.datetime.strftime(last_used_time, time_fmt)
                 last_used_delta = now - last_used_time
 
-                line = '[%s](%s) (%s days)' % (tab['title'], url, last_used_delta.days)
-                if overflow_mode == 'truncate':
-                    if len(line) > W:
-                        line = line[:W-3] + '...'
-                    print(line)
-                elif overflow_mode == 'wrap':
-                    print(line)
+                if format == 'md':
+                    line = '[%s](%s) (%s days)' % (tab['title'], url, last_used_delta.days)
+                    if overflow_mode == 'truncate':
+                        if len(line) > W:
+                            line = line[:W-3] + '...'
+                        print(line)
+                    elif overflow_mode == 'wrap':
+                        print(line)
+                elif format == 'html':
+                    # TODO: html escape, jinja escape
+                    if '{%' in tab['title']:
+                        print('jinja conflict in tab title:')
+                        print(tab['title'])
+                        continue
+                    write(f, '<a href="%s">%s</a> (%s)<br>' % (url, tab['title'], last_used_delta.days))
 
-    def print_session_md(self):
+    def print_session(self, filename=None, format=None):
+        format = format or 'md'
+        f = None if not filename else open(filename, 'w')
+
         for wnum, w in enumerate(self.session['windows']):
-            print('')
-            print('## window %s (%s tabs)' % (wnum, len(w['tabs'])))
+            if format == 'md':
+                print('')
+                print('## window %s (%s tabs)' % (wnum, len(w['tabs'])))
+            elif format == 'html':
+                write(f, '<h3>window %d (%s tabs)</h3>' % (wnum, len(w['tabs'])))
             for tnum, t in enumerate(w['tabs']):
                 e0 = t['entries'][-1]
                 url = e0.get('url', None)
                 uri = e0.get('originalURI', None)
                 # print('  %d: %s %s (%d entries)' % (tnum, url, e0['title'], len(t['entries'])))
-                print('- [%s](%s)' % (e0['title'], url))
+                if format == 'md':
+                    print('- [%s](%s)' % (e0['title'], url))
+                elif format == 'html':
+                    # TODO: html escape
+                    write(f, '<a href="%s">%s</a><br>' % (url, e0['title']))
 
     def print_session_history(self):
         for wnum, w in enumerate(self.session['windows']):
@@ -268,19 +330,30 @@ class FirefoxProfile(object):
                     else: 
                         print('      %s%s %s' % (en_num*' ', url, e['title']))
     
-    def render_search_page(self):
-        # print tree structure of bookmark folders to an html file (via md)
-        # each level is show/hide-able
-        # search box that searches all urls and titles, and hides non-match branches
+    def render_dashboard(self):
+        # render fragments
+        self.print_session(filename='tabs.html', format='html')
+        self.print_synced_tabs(filename='synced.html', format='html')
+        self.print_bookmarks_tree(filename='bookmarks.html', format='html')
 
-        # write tabs.md, then pandoc -> html (or just write html)
-        # write bookmarks.html (tree structured jinja won't work)
-        # use ff-search-template.html jinja template to combine
+        # render template        
+        template_file = 'ff-dashboard-template.html'
+        output_file = 'ff-dashboard.html'
+        
+        templateLoader = jinja2.FileSystemLoader(searchpath="./")
+        templateEnv = jinja2.Environment(loader=templateLoader)
+        template = templateEnv.get_template(template_file)
+        rendered = template.render(last_sync_str=self.last_sync_str, now=now)
 
-        # print last sync time
-        # print render time
-        self.print_synced_tabs_md('tabs.html')
-        self.print
+        with open(output_file, 'w') as f:
+            f.write(rendered)
+            
+        #os.remove('tabs.html')
+        #os.remove('synced.html')
+        #os.remove('bokmarks.html')
+        
+        print('wrote %d bytes to %s' % (len(rendered), output_file))
+                
 
     def inspect_session(self):
         for k in self.session.keys():
@@ -314,6 +387,14 @@ def mozlz4_to_text(filepath):
     valid_bytes = bytestream.read()
     text = lz4.block.decompress(valid_bytes)
     return text
+
+
+def write(file, line):
+    if file:
+        file.write(line + '\n')
+        file.flush()
+    else:
+        print(line)
 
 
 if __name__ == "__main__":

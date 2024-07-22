@@ -1,0 +1,26 @@
+<html>
+    <head>
+        <title>fftool</title>
+        <link rel="stylesheet" type="text/css" href="dashboard.css">
+        <script src="dashboard.js"></script>
+    </head>
+    <body>
+        <h1>Firefox url dashboard</h1>
+        rendered at: {{ now }}<br>
+        {{ last_sync_str }}<br>
+
+        <div>
+            <input class='input mb-5' type="search" id="searchbox" placeholder="omnisearch" tabindex="0" autofocus>
+        </div>
+        
+        <h2>bookmarks</h2>
+        {% include 'bookmarks.html' %}
+
+        <h2>local tabs</h2>
+        {% include 'tabs.html' %}
+
+        <h2>synced</h2>
+        {% include 'synced.html' %}
+
+    </body>
+</html>
