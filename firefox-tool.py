@@ -153,10 +153,15 @@ class FirefoxProfile(object):
         cursor.execute("select * from moz_meta where key='last_sync_time'")
         rows = cursor.fetchall()
         self.last_sync_time_ts = rows[0][1]
-        last_sync_time = datetime.datetime.fromtimestamp(self.last_sync_time_ts//1000)
-        last_sync_time_str = datetime.datetime.strftime(last_sync_time, time_fmt)
-        last_sync_delta = now - last_sync_time
-        self.last_sync_str = 'last sync: %s (%s ago)' % (last_sync_time_str, last_sync_delta)
+        print(rows[0])
+        if self.last_sync_time_ts > 4000000000000000:
+            # something weird on mac (4102405200000000)
+            self.last_sync_str = 'last sync: unknown'
+        else:
+            last_sync_time = datetime.datetime.fromtimestamp(self.last_sync_time_ts//1000)
+            last_sync_time_str = datetime.datetime.strftime(last_sync_time, time_fmt)
+            last_sync_delta = now - last_sync_time
+            self.last_sync_str = 'last sync: %s (%s ago)' % (last_sync_time_str, last_sync_delta)
 
         # get device metadata (not really needed)
         cursor.execute("select * from moz_meta where key='remote_clients'")
