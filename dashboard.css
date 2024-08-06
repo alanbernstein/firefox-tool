@@ -11,6 +11,11 @@ a {
     color: #55c;
 }
 
+a:after {
+    content: "\A";
+    white-space: pre;
+}
+
 a:visited {
     color: #c5c;
 }
@@ -20,4 +25,12 @@ a:visited {
     margin-left: 1em;
     padding: 2px;
     padding-left: 0.5em
+}
+
+.folder:empty {
+    display: none;
+}
+
+.hide {
+    display: none;
 }

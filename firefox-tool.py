@@ -228,7 +228,7 @@ class FirefoxProfile(object):
         if row['fk'] in self.places_rows_by_id:
         #if row['type'] == 1
             url = self.places_rows_by_id[row['fk']]['url']
-            write(f, '%s<a href="%s">%s</a><br>' % ('  ' * depth, url, row['title']))
+            write(f, '%s<a href="%s">%s</a>' % ('  ' * depth, url, row['title']))
         else:
             if node_id in self.parent_to_children:
             # if row['type'] == 2
@@ -295,7 +295,7 @@ class FirefoxProfile(object):
                         print('jinja conflict in tab title:')
                         print(tab['title'])
                         continue
-                    write(f, '<a href="%s">%s</a> (%s)<br>' % (url, tab['title'], last_used_delta.days))
+                    write(f, '<a href="%s">%s (%s)</a>' % (url, tab['title'], last_used_delta.days))
 
     def print_session(self, filename=None, format=None):
         format = format or 'md'
@@ -316,7 +316,7 @@ class FirefoxProfile(object):
                     print('- [%s](%s)' % (e0['title'], url))
                 elif format == 'html':
                     # TODO: html escape
-                    write(f, '<a href="%s">%s</a><br>' % (url, e0['title']))
+                    write(f, '<a href="%s">%s</a>' % (url, e0['title']))
 
     def print_session_history(self):
         for wnum, w in enumerate(self.session['windows']):
