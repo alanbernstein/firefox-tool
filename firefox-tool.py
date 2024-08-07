@@ -195,7 +195,7 @@ class FirefoxProfile(object):
         elif format == 'mddoc':
             self.recurse_bookmarks_tree_mddoc(ROOT_NODE_ID)
         elif format == 'html':
-            if filename:
+            if filename and os.path.exists(filename):
                 os.remove(filename) # delete it here since all further writes must be in append mode
             self.recurse_bookmarks_tree_html(ROOT_NODE_ID, filename=filename)
 
@@ -352,10 +352,10 @@ class FirefoxProfile(object):
 
         with open(output_file, 'w') as f:
             f.write(rendered)
-            
-        #os.remove('tabs.html')
-        #os.remove('synced.html')
-        #os.remove('bokmarks.html')
+
+        os.remove('tabs.html')
+        os.remove('synced.html')
+        os.remove('bookmarks.html')
         
         print('wrote %d bytes to %s' % (len(rendered), output_file))
                 
