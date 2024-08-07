@@ -17,6 +17,9 @@ time_fmt = '%Y/%m/%d %H:%M:%S'
 now = datetime.datetime.now()
 now_str = datetime.datetime.strftime(now, time_fmt)
 
+# TODO: analyze domains
+# TODO: domain-specific metadata: video length for youtube
+
 overflow_mode = 'truncate'
 if not os.isatty(1):
     # if piping output, then can't get real terminal width,
@@ -49,7 +52,12 @@ def main():
     if sys.argv[1] == 'history':
         print('not yet implemented')
     if sys.argv[1] == 'search':
-        print('not yet implemented')
+        pattern = None
+        if len(sys.argv) > 2:
+            pattern = sys.argv[2]
+        p.multisearch(pattern)
+    if sys.argv[1] in ['dedup', 'deduplicate']:
+        p.find_dupes()
     if sys.argv[1] in ['profile-path', 'profile']:
         print(p.get_profile_path())
     if sys.argv[1] in ['render']:
@@ -172,6 +180,39 @@ class FirefoxProfile(object):
         # get tab data
         cursor.execute('select * from tabs;')
         self.tab_rows = cursor.fetchall()
+
+    def multisearch(self, pattern):
+        print('not yet implemented')
+        res1 = self.search_local_tabs(pattern)
+        res2 = self.search_synced_tabs(pattern)
+        res3 = self.search_bookmarks(pattern)
+        # TODO present results in a useful way
+
+    def search_local_tabs(self, pattern):
+        res = []
+        for tab in []:
+            if pattern in tab.url or pattern in tab.title:
+                res.append(tab)
+        return res
+
+    def search_synced_tabs(self, pattern):
+        res = []
+        for tab in []:
+            if pattern in tab.url or pattern in tab.title:
+                res.append(tab)
+        return res
+
+    def search_bookmarks(self, pattern):
+        res = []
+        # create 
+        for bookmark in []:
+            if pattern in bookmark.url or pattern in bookmark.title or pattern in bookmark.path:
+                res.append(bookmark)
+        return res
+
+    def find_dupes(self):
+        # TODO
+        print('not yet implemented')
 
     def print_bookmarks(self):
         for row in self.bookmarks_join_rows:
