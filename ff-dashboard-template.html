@@ -17,14 +17,27 @@
         
         <!-- TODO: navigation -->
 
-        <h2>bookmarks</h2>
-        {% include 'bookmarks.html' %}
 
-        <h2>local tabs</h2>
-        {% include 'tabs.html' %}
+        <details>
+            <h2>synced</h2>
+            <summary>
+                {% include 'synced.html' %}
+            </summary>
+        </details>
 
-        <h2>synced</h2>
-        {% include 'synced.html' %}
+        <details>
+            <h2>tabs</h2>
+            <summary>
+                {% include 'tabs.html' %}
+            </summary>
+        </details>
+
+        <details>
+            <h2>bookmarks</h2>
+            <summary>
+                {% include 'bookmarks.html' %}
+            </summary>
+        </details>
 
     </body>
 </html>

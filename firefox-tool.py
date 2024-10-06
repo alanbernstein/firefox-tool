@@ -19,6 +19,7 @@ now_str = datetime.datetime.strftime(now, time_fmt)
 
 # TODO: analyze domains
 # TODO: domain-specific metadata: video length for youtube
+# TODO: work for chrome too
 
 overflow_mode = 'truncate'
 if not os.isatty(1):
@@ -77,6 +78,28 @@ ff bookmarks-tree
 ff render
 ff profile-path""")
 
+
+class ChromeProfile(object):
+    def __init__(self, profile_path=None):
+        # https://github.com/JRBANCEL/Chromagnon?tab=readme-ov-file
+        self.profile_path = profile_path or self.get_profile_path()
+        self.load_bookmarks()
+    
+    def load_tabs(self):
+        pass
+    
+    def get_profile_path(self):
+        if platform.system() == 'Darwin':
+            return os.path.expanduser('~/Library/Application Support/Google/Chrome/Default')
+        if platform.system() == 'Linux':
+            return os.path.expanduser('~/.config/google-chrome/Default')
+        raise NotImplementedError('unknown profile path')
+    
+    def load_bookmarks(self):
+        bookmarks_file = self.profile_path + '/Bookmarks'
+        with open(bookmarks_file, 'r') as f:
+            self.bookmarks_json = json.load(f)
+
 class FirefoxProfile(object):
     def __init__(self, profile_path=None):
         self.profile_path = profile_path or self.get_profile_path()
@@ -92,6 +115,7 @@ class FirefoxProfile(object):
             return os.path.expanduser("~/Library/Application Support/Firefox/Profiles")
         if platform.system() == 'Linux':
             return os.path.expanduser("~/.mozilla/firefox")
+        raise NotImplementedError('unknown profile path')
 
     def get_profile_path(self):
         # find the thing that endswith .default-release
@@ -315,6 +339,7 @@ class FirefoxProfile(object):
             tabs = data['tabs']
             # these seem to be listed in ascending age, oldest at the bottom
             # this is what i would normally want, so no need to sort
+            print('%4d tabs (%s)' % (len(tabs), device_name))
             for tab in tabs:
                 urls = tab['urlHistory']
                 if len(urls) > 1:
@@ -341,19 +366,22 @@ class FirefoxProfile(object):
                         print('jinja conflict in tab title:')
                         print(tab['title'])
                         continue
-                    write(f, '<a href="%s">%s (%s)</a>' % (url, tab['title'], last_used_delta.days))
+                    write(f, '<a href="%s">- %s (%s)</a>' % (url, tab['title'], last_used_delta.days))
 
     def print_session(self, filename=None, format=None):
         format = format or 'md'
         f = None if not filename else open(filename, 'w')
 
-        for wnum, w in enumerate(self.session['windows']):
+        windows = self.session['windows']
+        total_tabs = 0
+        for wnum, w in enumerate(windows):
             if format == 'md':
                 print('')
                 print('## window %s (%s tabs)' % (wnum, len(w['tabs'])))
             elif format == 'html':
                 write(f, '<h3>window %d (%s tabs)</h3>' % (wnum, len(w['tabs'])))
             for tnum, t in enumerate(w['tabs']):
+                total_tabs += 1
                 e0 = t['entries'][-1]
                 url = e0.get('url', None)
                 uri = e0.get('originalURI', None)
@@ -362,7 +390,8 @@ class FirefoxProfile(object):
                     print('- [%s](%s)' % (e0['title'], url))
                 elif format == 'html':
                     # TODO: html escape
-                    write(f, '<a href="%s">%s</a>' % (url, e0['title']))
+                    write(f, '<a href="%s">- %s</a>' % (url, e0['title']))
+        print('%4d tabs (local session (%d windows))' % (total_tabs, len(windows)))
 
     def print_session_history(self):
         for wnum, w in enumerate(self.session['windows']):
