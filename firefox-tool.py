@@ -84,23 +84,24 @@ class ChromeProfile(object):
         # https://github.com/JRBANCEL/Chromagnon?tab=readme-ov-file
         self.profile_path = profile_path or self.get_profile_path()
         self.load_bookmarks()
-    
+
     def load_tabs(self):
         pass
-    
+
     def get_profile_path(self):
         if platform.system() == 'Darwin':
             return os.path.expanduser('~/Library/Application Support/Google/Chrome/Default')
         if platform.system() == 'Linux':
             return os.path.expanduser('~/.config/google-chrome/Default')
         raise NotImplementedError('unknown profile path')
-    
+
     def load_bookmarks(self):
         bookmarks_file = self.profile_path + '/Bookmarks'
         with open(bookmarks_file, 'r') as f:
             self.bookmarks_json = json.load(f)
 
 class FirefoxProfile(object):
+    old_device_names = ['Firefox on iPhone', 'mbp2']
     def __init__(self, profile_path=None):
         self.profile_path = profile_path or self.get_profile_path()
         raw = mozlz4_to_text(self.get_session_file())
@@ -109,6 +110,10 @@ class FirefoxProfile(object):
         self.connect_sync_db()
         self.load_places_queries()
         self.load_sync_queries()
+        self.filter_devices(self.old_device_names)
+
+    def filter_devices(self, device_names):
+        pass
 
     def get_profile_parent(self):
         if platform.system() == 'Darwin':
@@ -249,12 +254,12 @@ class FirefoxProfile(object):
 
     def print_bookmarks_tree(self, filename=None, format=None):
         format = format or 'html'
-        
+
         ROOT_NODE_ID = 1
         self.parent_to_children = defaultdict(list)
         for id, row in self.bookmarks_rows_by_id.items():
             self.parent_to_children[row['parent']].append(row['id'])
-        
+
         if format == 'md':
             self.recurse_bookmarks_tree_mdlist(ROOT_NODE_ID)
         elif format == 'mddoc':
@@ -277,7 +282,7 @@ class FirefoxProfile(object):
             if node_id in self.parent_to_children:
                 for c in self.parent_to_children[node_id]:
                     self.recurse_bookmarks_tree_mdlist(c, depth+1)
-    
+
     def recurse_bookmarks_tree_mddoc(self, node_id, depth=0):
         row = self.bookmarks_rows_by_id[node_id]
 
@@ -317,25 +322,34 @@ class FirefoxProfile(object):
                     self.recurse_bookmarks_tree_html(c, depth+1, filename)
                 write(f, '%s</details>' % ('  ' * depth))
 
-    def print_synced_tabs(self, device_name_pattern=None, filename=None, format=None):
+    def print_synced_tabs(self, device_name_pattern=None, omit_name_patterns=None, filename=None, format=None):
         format = format or 'md'
         f = None if not filename else open(filename, 'w')
-        
+
         print(self.last_sync_str)
         for row in self.tab_rows:
             id, record, last_modified = row
             data = json.loads(record)
             device_name = data['clientName']
             if device_name_pattern and device_name_pattern not in device_name.lower():
-                print('')
                 print('omitting tabs from "%s"' % device_name)
                 continue
+            if omit_name_patterns:
+                skip = False
+                # db()
+                for p in omit_name_patterns:
+                    if p.lower() in device_name.lower():
+                        print('omitting tabs from "%s"' % device_name)
+                        skip = True
+                        continue
+                if skip:
+                    continue
             if format == 'md':
                 print('')
                 print('## %s (%s)' % (device_name, now_str))
             elif format == 'html':
                 write(f, '<h3>%s (%s tabs)</h3>' % (device_name, len(data['tabs'])))
-                
+
             tabs = data['tabs']
             # these seem to be listed in ascending age, oldest at the bottom
             # this is what i would normally want, so no need to sort
@@ -402,19 +416,19 @@ class FirefoxProfile(object):
                     uri = e.get('originalURI', None)
                     if en_num == 0:
                         print('  %d: %s %s' % (tnum, url, e['title']))
-                    else: 
+                    else:
                         print('      %s%s %s' % (en_num*' ', url, e['title']))
-    
+
     def render_dashboard(self):
         # render fragments
         self.print_session(filename='tabs.html', format='html')
-        self.print_synced_tabs(filename='synced.html', format='html')
+        self.print_synced_tabs(filename='synced.html', format='html', omit_name_patterns=self.old_device_names)
         self.print_bookmarks_tree(filename='bookmarks.html', format='html')
 
-        # render template        
+        # render template
         template_file = 'ff-dashboard-template.html'
         output_file = 'ff-dashboard.html'
-        
+
         templateLoader = jinja2.FileSystemLoader(searchpath="./")
         templateEnv = jinja2.Environment(loader=templateLoader)
         template = templateEnv.get_template(template_file)
@@ -426,9 +440,9 @@ class FirefoxProfile(object):
         os.remove('tabs.html')
         os.remove('synced.html')
         os.remove('bookmarks.html')
-        
+
         print('wrote %d bytes to %s' % (len(rendered), output_file))
-                
+
 
     def inspect_session(self):
         for k in self.session.keys():
