@@ -33,6 +33,14 @@ In particular, I keep too many tabs open, because I know that once they get rele
 ------------------------------------------------------------------------------------- stuff that wasn't worth saving at all
 - browser history
 
+# how
+long-term: I want to integrate this directly into the browser.
+
+currently:
+
+- render dashboard page on a cron job and serve it statically on my home server
+- use [https://addons.mozilla.org/en-US/firefox/addon/custom-new-tab-page/](this extension) to view the dashboard on all new tabs in firefox.
+
 # bookmark UI is broken
 
 ## my usage patterns
@@ -47,10 +55,10 @@ For saving bookmarks, three options:
 3. press ctrl-d, then add TAGS by typing strings with autocomplete.
 
 For viewing/browsing/retrieving bookmarks:
-Visually navigate the toolbar, searching for the correct FOLDER sub tree where you saved the bookmark. note that TAGS are not used for viewing/browsing. even so , this may sound simple, but again it breaks down when the number of bookmarks and size of the directory tree gets large.
+Visually navigate the toolbar, searching for the correct FOLDER sub tree where you saved the bookmark. note that TAGS are not used for viewing/browsing. even so, this may sound simple, but again it breaks down when the number of bookmarks and size of the directory tree gets large.
 
 for saving, i need to:
-1. be able to search within the directory tree for where to save it.
+1. be able to search, by keyboard, within the directory tree for where to save it.
 2. have access to saving by tag more quickly
 
 for retrieving, i need to be able to use tags, via text box (autocomplete fuzzy, full GUI dropdown), inside a first-class UI element on the main UI - perhaps in a text box in the bookmark bar. if it is a separate page, or hidden interface, it's not convenient enough for me to use. a keyboard shortcut might work, but alt-shift-L is a two-finger shortcut, i really want a one-left-hand shortcut - ideally by overriding ctrl-d
@@ -74,6 +82,7 @@ roughly:
 cd your-repo-folder
 git clone git@github.com:alanbernstein/firefox-tool.git
 pip install -r requirements.txt
+cp example.env .env  # and then update values
 
 # suggested terse command line alias and/or symlink `ff`
 cd your-command-folder

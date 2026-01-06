@@ -2,9 +2,10 @@ body {
     color: #ccc;
     background-color: #222;
     font-family: arial, sans-serif;
-    max-width: 50rem;
+    max-width: 70rem;
     padding: 2rem;
     margin: auto;
+    position: relative;
 }
 
 a {
@@ -33,4 +34,144 @@ a:visited {
 
 .hide {
     display: none;
+}
+
+/* Metadata in bottom-left corner */
+#metadata {
+    position: fixed;
+    bottom: 1rem;
+    left: 1rem;
+    background: #333;
+    border: 1px solid #555;
+    padding: 0.5rem 1rem;
+    border-radius: 0.25rem;
+    white-space: nowrap;
+    z-index: 100;
+    font-size: 0.85rem;
+}
+
+/* Quick bookmarks */
+#quick-bookmarks {
+    display: flex;
+    gap: 1rem;
+    margin: 1rem 0;
+    padding: 0.5rem;
+    background: #2a2a2a;
+    border-radius: 0.25rem;
+    flex-wrap: wrap;
+}
+
+.quick-bookmark {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    background: #333;
+    border: 1px solid #555;
+    border-radius: 0.25rem;
+    text-decoration: none;
+}
+
+.quick-bookmark:hover {
+    background: #444;
+    border-color: #777;
+}
+
+.quick-bookmark:after {
+    content: "";
+}
+
+/* Search container */
+.search-container {
+    margin: 1rem 0;
+}
+
+.search-container input {
+    width: 100%;
+    padding: 0.5rem;
+    background: #333;
+    border: 1px solid #555;
+    color: #ccc;
+    font-size: 1rem;
+    border-radius: 0.25rem;
+}
+
+.search-container input:focus {
+    outline: none;
+    border-color: #777;
+}
+
+/* Tab navigation */
+.tabs {
+    display: flex;
+    gap: 0.25rem;
+    margin: 1rem 0 0 0;
+    border-bottom: 2px solid #444;
+}
+
+.tabs.sub-tabs {
+    margin-top: 0;
+    border-bottom: none;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+}
+
+.tab-button {
+    background: #2a2a2a;
+    color: #888;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 0.5rem 1rem;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+}
+
+.tabs.sub-tabs .tab-button {
+    font-size: 0.8rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 0.25rem;
+    border: 1px solid #444;
+    border-bottom: 1px solid #444;
+}
+
+.tab-button:hover {
+    background: #333;
+    color: #aaa;
+}
+
+.tab-button.active {
+    background: #333;
+    color: #fff;
+    border-bottom-color: #55c;
+}
+
+.tabs.sub-tabs .tab-button:hover {
+    background: #3a3a3a;
+    border-color: #666;
+}
+
+.tabs.sub-tabs .tab-button.active {
+    background: #444;
+    color: #fff;
+    border-color: #55c;
+    border-bottom-color: #55c;
+}
+
+/* Tab content */
+.tab-content {
+    display: none;
+    padding: 1rem 0;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+.subtab-content {
+    display: none;
+    padding: 0.5rem 0;
+}
+
+.subtab-content.active {
+    display: block;
 }

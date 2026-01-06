@@ -101,7 +101,7 @@ class ChromeProfile(object):
             self.bookmarks_json = json.load(f)
 
 class FirefoxProfile(object):
-    old_device_names = ['Firefox on iPhone', 'mbp2']
+    old_device_names = ['Firefox on iPhone']
     def __init__(self, profile_path=None):
         self.profile_path = profile_path or self.get_profile_path()
         raw = mozlz4_to_text(self.get_session_file())
@@ -119,6 +119,11 @@ class FirefoxProfile(object):
         if platform.system() == 'Darwin':
             return os.path.expanduser("~/Library/Application Support/Firefox/Profiles")
         if platform.system() == 'Linux':
+            # Check for snap Firefox first (more common on modern Ubuntu)
+            snap_path = os.path.expanduser("~/snap/firefox/common/.mozilla/firefox")
+            if os.path.exists(snap_path):
+                return snap_path
+            # Fall back to traditional Firefox location
             return os.path.expanduser("~/.mozilla/firefox")
         raise NotImplementedError('unknown profile path')
 
@@ -190,15 +195,24 @@ class FirefoxProfile(object):
         cursor.execute("select * from moz_meta where key='last_sync_time'")
         rows = cursor.fetchall()
         self.last_sync_time_ts = rows[0][1]
-        print(rows[0])
+        print(f'last sync time row: {rows[0]}')
         if self.last_sync_time_ts > 4000000000000000:
-            # something weird on mac (4102405200000000)
-            self.last_sync_str = 'last sync: unknown'
+            # Sentinel value (Dec 31 2099) - sync hasn't occurred or is being initialized
+            # Fall back to using max tab modification time as proxy for last sync
+            cursor.execute("SELECT MAX(last_modified) FROM tabs")
+            max_tab_result = cursor.fetchone()
+            if max_tab_result and max_tab_result[0]:
+                max_tab_time = max_tab_result[0]
+                # Store as seconds (not milliseconds) for JavaScript
+                self.sync_timestamp = max_tab_time // 1000
+                self.sync_suffix = ' [from tab data]'
+            else:
+                self.sync_timestamp = None
+                self.sync_suffix = ' [never]'
         else:
-            last_sync_time = datetime.datetime.fromtimestamp(self.last_sync_time_ts//1000)
-            last_sync_time_str = datetime.datetime.strftime(last_sync_time, time_fmt)
-            last_sync_delta = now - last_sync_time
-            self.last_sync_str = 'last sync: %s (%s ago)' % (last_sync_time_str, last_sync_delta)
+            # Store as seconds (not milliseconds) for JavaScript
+            self.sync_timestamp = self.last_sync_time_ts // 1000
+            self.sync_suffix = ''
 
         # get device metadata (not really needed)
         cursor.execute("select * from moz_meta where key='remote_clients'")
@@ -252,6 +266,36 @@ class FirefoxProfile(object):
         for row in branch_node_rows[:30]:
             print(row)
 
+    def print_quick_bookmarks(self, filename=None):
+        """Generate quick bookmarks from toolbar root (non-folder items)"""
+        f = None if not filename else open(filename, 'w')
+
+        # Find toolbar node
+        TOOLBAR_NODE_ID = None
+        for id, row in self.bookmarks_rows_by_id.items():
+            if row['title'] == 'toolbar':
+                TOOLBAR_NODE_ID = id
+                break
+
+        if not TOOLBAR_NODE_ID:
+            return
+
+        # Get toolbar children (only non-folder items)
+        ROOT_NODE_ID = 1
+        self.parent_to_children = defaultdict(list)
+        for id, row in self.bookmarks_rows_by_id.items():
+            self.parent_to_children[row['parent']].append(row['id'])
+
+        toolbar_children = self.parent_to_children[TOOLBAR_NODE_ID]
+        for child_id in toolbar_children:
+            child_row = self.bookmarks_rows_by_id[child_id]
+            # Type 1 = bookmark, Type 2 = folder
+            if child_row['type'] == 1 and child_row['fk'] in self.places_rows_by_id:
+                url = self.places_rows_by_id[child_row['fk']]['url']
+                title = child_row['title']
+                # For now, no favicons - just simple links
+                write(f, '<a href="%s" class="quick-bookmark">%s</a>' % (url, title))
+
     def print_bookmarks_tree(self, filename=None, format=None):
         format = format or 'html'
 
@@ -268,6 +312,62 @@ class FirefoxProfile(object):
             if filename and os.path.exists(filename):
                 os.remove(filename) # delete it here since all further writes must be in append mode
             self.recurse_bookmarks_tree_html(ROOT_NODE_ID, filename=filename)
+        elif format == 'html-tabs':
+            if filename and os.path.exists(filename):
+                os.remove(filename)
+            self.print_bookmarks_with_tabs(filename=filename)
+
+    def print_bookmarks_with_tabs(self, filename=None):
+        """Generate bookmarks with sub-tabs for toolbar folders"""
+        f = None if not filename else open(filename, 'w')
+
+        # Find toolbar node
+        TOOLBAR_NODE_ID = None
+        for id, row in self.bookmarks_rows_by_id.items():
+            if row['title'] == 'toolbar':
+                TOOLBAR_NODE_ID = id
+                break
+
+        if not TOOLBAR_NODE_ID:
+            return
+
+        # Get toolbar folder children
+        toolbar_children = self.parent_to_children[TOOLBAR_NODE_ID]
+        folders = []
+        for child_id in toolbar_children:
+            child_row = self.bookmarks_rows_by_id[child_id]
+            # Type 2 = folder
+            if child_row['type'] == 2:
+                folders.append((child_id, child_row['title']))
+
+        # Generate sub-tabs for folders
+        write(f, '<div class="tabs sub-tabs">')
+        for i, (folder_id, folder_name) in enumerate(folders):
+            folder_slug = folder_name.replace(' ', '-').lower()
+            active_class = ' active' if i == 0 else ''
+            write(f, '  <button class="tab-button%s" data-subtab="bookmarks-%s">%s</button>' % (active_class, folder_slug, folder_name))
+        write(f, '</div>')
+
+        # Close the file to ensure tabs are written
+        if f:
+            f.close()
+
+        # Generate content for each folder (using append mode since tabs were already written)
+        for i, (folder_id, folder_name) in enumerate(folders):
+            folder_slug = folder_name.replace(' ', '-').lower()
+            active_class = ' active' if i == 0 else ''
+            f = open(filename, 'a') if filename else None
+            write(f, '<div id="bookmarks-%s-content" class="subtab-content%s" data-subtab="bookmarks-%s">' % (folder_slug, active_class, folder_slug))
+            write(f, '  <h3>%s</h3>' % folder_name)
+            # Render folder's children directly (not the folder itself)
+            if folder_id in self.parent_to_children:
+                child_ids = self.parent_to_children[folder_id]
+                child_ids_sorted = sorted(child_ids, key=lambda x: self.bookmarks_rows_by_id[x]['position'])
+                for child_id in child_ids_sorted:
+                    self.recurse_bookmarks_tree_html(child_id, depth=2, filename=filename)
+            write(f, '</div>')
+            if f:
+                f.close()
 
     def recurse_bookmarks_tree_mdlist(self, node_id, depth=0):
         row = self.bookmarks_rows_by_id[node_id]
@@ -326,7 +426,8 @@ class FirefoxProfile(object):
         format = format or 'md'
         f = None if not filename else open(filename, 'w')
 
-        print(self.last_sync_str)
+        # Collect devices first
+        devices = []
         for row in self.tab_rows:
             id, record, last_modified = row
             data = json.loads(record)
@@ -336,7 +437,6 @@ class FirefoxProfile(object):
                 continue
             if omit_name_patterns:
                 skip = False
-                # db()
                 for p in omit_name_patterns:
                     if p.lower() in device_name.lower():
                         print('omitting tabs from "%s"' % device_name)
@@ -344,29 +444,51 @@ class FirefoxProfile(object):
                         continue
                 if skip:
                     continue
-            if format == 'md':
+            devices.append((device_name, data['tabs']))
+            print('%4d tabs (%s)' % (len(data['tabs']), device_name))
+
+        if format == 'html':
+            # Generate sub-tabs for devices
+            write(f, '<div class="tabs sub-tabs">')
+            for i, (device_name, tabs) in enumerate(devices):
+                device_id = 'synced-' + device_name.replace(' ', '-').replace("'", '').lower()
+                active_class = ' active' if i == 0 else ''
+                write(f, '  <button class="tab-button%s" data-subtab="%s">%s</button>' % (active_class, device_id, device_name))
+            write(f, '</div>')
+
+            # Generate content for each device
+            for i, (device_name, tabs) in enumerate(devices):
+                device_id = 'synced-' + device_name.replace(' ', '-').replace("'", '').lower()
+                active_class = ' active' if i == 0 else ''
+                write(f, '<div id="%s-content" class="subtab-content%s" data-subtab="%s">' % (device_id, active_class, device_id))
+                write(f, '  <h3>%s (%s tabs)</h3>' % (device_name, len(tabs)))
+
+                for tab in tabs:
+                    urls = tab['urlHistory']
+                    url = urls[0]
+                    last_used_ts = tab['lastUsed']
+                    last_used_time = datetime.datetime.fromtimestamp(last_used_ts)
+                    last_used_delta = now - last_used_time
+
+                    # TODO: html escape, jinja escape
+                    if '{%' in tab['title']:
+                        print('jinja conflict in tab title:')
+                        print(tab['title'])
+                        continue
+                    write(f, '  <a href="%s">- %s (%s)</a>' % (url, tab['title'], last_used_delta.days))
+
+                write(f, '</div>')
+        elif format == 'md':
+            for device_name, tabs in devices:
                 print('')
                 print('## %s (%s)' % (device_name, now_str))
-            elif format == 'html':
-                write(f, '<h3>%s (%s tabs)</h3>' % (device_name, len(data['tabs'])))
+                for tab in tabs:
+                    urls = tab['urlHistory']
+                    url = urls[0]
+                    last_used_ts = tab['lastUsed']
+                    last_used_time = datetime.datetime.fromtimestamp(last_used_ts)
+                    last_used_delta = now - last_used_time
 
-            tabs = data['tabs']
-            # these seem to be listed in ascending age, oldest at the bottom
-            # this is what i would normally want, so no need to sort
-            print('%4d tabs (%s)' % (len(tabs), device_name))
-            for tab in tabs:
-                urls = tab['urlHistory']
-                if len(urls) > 1:
-                    pass
-                    # db()
-                url = urls[0]
-
-                last_used_ts = tab['lastUsed']
-                last_used_time = datetime.datetime.fromtimestamp(last_used_ts)
-                last_used_time_str = datetime.datetime.strftime(last_used_time, time_fmt)
-                last_used_delta = now - last_used_time
-
-                if format == 'md':
                     line = '[%s](%s) (%s days)' % (tab['title'], url, last_used_delta.days)
                     if overflow_mode == 'truncate':
                         if len(line) > W:
@@ -374,13 +496,6 @@ class FirefoxProfile(object):
                         print(line)
                     elif overflow_mode == 'wrap':
                         print(line)
-                elif format == 'html':
-                    # TODO: html escape, jinja escape
-                    if '{%' in tab['title']:
-                        print('jinja conflict in tab title:')
-                        print(tab['title'])
-                        continue
-                    write(f, '<a href="%s">- %s (%s)</a>' % (url, tab['title'], last_used_delta.days))
 
     def print_session(self, filename=None, format=None):
         format = format or 'md'
@@ -388,23 +503,37 @@ class FirefoxProfile(object):
 
         windows = self.session['windows']
         total_tabs = 0
-        for wnum, w in enumerate(windows):
-            if format == 'md':
+
+        if format == 'html':
+            # Generate sub-tabs for windows
+            write(f, '<div class="tabs sub-tabs">')
+            for wnum, w in enumerate(windows):
+                active_class = ' active' if wnum == 0 else ''
+                write(f, '  <button class="tab-button%s" data-subtab="tabs-window%d">Window %d</button>' % (active_class, wnum, wnum + 1))
+            write(f, '</div>')
+
+            # Generate content for each window
+            for wnum, w in enumerate(windows):
+                active_class = ' active' if wnum == 0 else ''
+                write(f, '<div id="tabs-window%d-content" class="subtab-content%s" data-subtab="tabs-window%d">' % (wnum, active_class, wnum))
+                write(f, '  <h3>window %d (%s tabs)</h3>' % (wnum + 1, len(w['tabs'])))
+                for tnum, t in enumerate(w['tabs']):
+                    total_tabs += 1
+                    e0 = t['entries'][-1]
+                    url = e0.get('url', None)
+                    # TODO: html escape
+                    write(f, '  <a href="%s">- %s</a>' % (url, e0['title']))
+                write(f, '</div>')
+        elif format == 'md':
+            for wnum, w in enumerate(windows):
                 print('')
                 print('## window %s (%s tabs)' % (wnum, len(w['tabs'])))
-            elif format == 'html':
-                write(f, '<h3>window %d (%s tabs)</h3>' % (wnum, len(w['tabs'])))
-            for tnum, t in enumerate(w['tabs']):
-                total_tabs += 1
-                e0 = t['entries'][-1]
-                url = e0.get('url', None)
-                uri = e0.get('originalURI', None)
-                # print('  %d: %s %s (%d entries)' % (tnum, url, e0['title'], len(t['entries'])))
-                if format == 'md':
+                for tnum, t in enumerate(w['tabs']):
+                    total_tabs += 1
+                    e0 = t['entries'][-1]
+                    url = e0.get('url', None)
                     print('- [%s](%s)' % (e0['title'], url))
-                elif format == 'html':
-                    # TODO: html escape
-                    write(f, '<a href="%s">- %s</a>' % (url, e0['title']))
+
         print('%4d tabs (local session (%d windows))' % (total_tabs, len(windows)))
 
     def print_session_history(self):
@@ -420,10 +549,11 @@ class FirefoxProfile(object):
                         print('      %s%s %s' % (en_num*' ', url, e['title']))
 
     def render_dashboard(self):
-        # render fragments
-        self.print_session(filename='tabs.html', format='html')
-        self.print_synced_tabs(filename='synced.html', format='html', omit_name_patterns=self.old_device_names)
-        self.print_bookmarks_tree(filename='bookmarks.html', format='html')
+        # render fragments with tab structure
+        self.print_session(filename='tmp/tabs.html', format='html')
+        self.print_synced_tabs(filename='tmp/synced.html', format='html', omit_name_patterns=self.old_device_names)
+        self.print_bookmarks_tree(filename='tmp/bookmarks.html', format='html-tabs')
+        self.print_quick_bookmarks(filename='tmp/quick-bookmarks.html')
 
         # render template
         template_file = 'ff-dashboard-template.html'
@@ -432,14 +562,14 @@ class FirefoxProfile(object):
         templateLoader = jinja2.FileSystemLoader(searchpath="./")
         templateEnv = jinja2.Environment(loader=templateLoader)
         template = templateEnv.get_template(template_file)
-        rendered = template.render(last_sync_str=self.last_sync_str, now=now)
+        rendered = template.render(
+            render_timestamp=int(now.timestamp()),
+            sync_timestamp=self.sync_timestamp if self.sync_timestamp else 0,
+            sync_suffix=self.sync_suffix
+        )
 
         with open(output_file, 'w') as f:
             f.write(rendered)
-
-        os.remove('tabs.html')
-        os.remove('synced.html')
-        os.remove('bookmarks.html')
 
         print('wrote %d bytes to %s' % (len(rendered), output_file))
 

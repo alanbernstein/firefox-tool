@@ -7,37 +7,48 @@
         <script src="dashboard.js"></script>
     </head>
     <body>
-        <h1>Firefox url dashboard</h1>
-        rendered at: {{ now }}<br>
-        {{ last_sync_str }}<br>
+        <!-- Metadata in bottom-left corner -->
+        <div id="metadata">
+            rendered: <span class="human-time" data-timestamp="{{ render_timestamp }}"></span><br>
+            last sync: <span class="human-time" data-timestamp="{{ sync_timestamp }}"></span>{{ sync_suffix }}<br>
+        </div>
 
-        <div>
+        Browser Link Archive Manager Program
+        <!-- Search bar -->
+        <div class="search-container">
             <input class='input mb-5' type="search" id="searchbox" placeholder="omnisearch" tabindex="0" autofocus />
         </div>
-        
-        <!-- TODO: navigation -->
 
+        <!-- Quick bookmarks bar with favicons -->
+        <div id="quick-bookmarks">
+            {% include 'tmp/quick-bookmarks.html' %}
+        </div>
 
-        <details>
-            <h2>synced</h2>
-            <summary>
-                {% include 'synced.html' %}
-            </summary>
-        </details>
+        <!-- Main navigation tabs -->
+        <div class="tabs main-tabs">
+            <button class="tab-button active" data-tab="synced">Synced Tabs</button>
+            <button class="tab-button" data-tab="tabs">Current Tabs</button>
+            <button class="tab-button" data-tab="bookmarks">📁 Bookmarks</button>
+            <button class="tab-button" data-tab="bookmarks-tags">🏷️ Bookmarks</button>
+        </div>
 
-        <details>
-            <h2>tabs</h2>
-            <summary>
-                {% include 'tabs.html' %}
-            </summary>
-        </details>
+        <!-- Tab content area -->
+        <div id="tab-content">
+            <!-- Synced Tabs Content -->
+            <div id="synced-content" class="tab-content active" data-tab="synced">
+                {% include 'tmp/synced.html' %}
+            </div>
 
-        <details>
-            <h2>bookmarks</h2>
-            <summary>
-                {% include 'bookmarks.html' %}
-            </summary>
-        </details>
+            <!-- Current Tabs Content -->
+            <div id="tabs-content" class="tab-content" data-tab="tabs">
+                {% include 'tmp/tabs.html' %}
+            </div>
+
+            <!-- Bookmarks Content -->
+            <div id="bookmarks-content" class="tab-content" data-tab="bookmarks">
+                {% include 'tmp/bookmarks.html' %}
+            </div>
+        </div>
 
     </body>
 </html>
