@@ -8,6 +8,7 @@ In particular, I keep too many tabs open, because I know that once they get rele
 
 ## url frecency spectrum
 - single tab I'm currently looking at
+
 ----------------------------------------------------------------------------------- stuff that i'm still using today
 - pinned tabs like inbox, calendar, todo list
 - reminders/notes/capture (ooh I have an idea -> mobile google search -> open one or two results -> eventually take action)
@@ -15,6 +16,7 @@ In particular, I keep too many tabs open, because I know that once they get rele
   - current task
   - several other tasks in my working memory
   - "important" tasks that were interrupted by time-sensitive things
+
   --------------------------------------------------------------------------------- stuff to save for later
 - commonly used sites
 - references
@@ -23,6 +25,7 @@ In particular, I keep too many tabs open, because I know that once they get rele
   - to watch
   - to learn
   - to do
+
 ------------------------------------------------------------------------------------ archives
 - tab dumps
 - project/task/shopping research archives
@@ -30,6 +33,7 @@ In particular, I keep too many tabs open, because I know that once they get rele
   - blocked ideas
   - abandoned ideas
   - completed ideas
+  
 ------------------------------------------------------------------------------------- stuff that wasn't worth saving at all
 - browser history
 

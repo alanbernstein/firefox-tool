@@ -8,7 +8,7 @@ export
 .phony: render deploy deploy-local view view-local
 
 LOCAL_HTML := ff-dashboard.html
-FTP_BASE := ftp://${WEBSITE_FTP_URL}/recipes
+FTP_BASE := ftp://${WEBSITE_FTP_URL}/blamp
 FTP_AUTH := --user ${WEBSITE_FTP_USERNAME}:${WEBSITE_FTP_PASSWORD}
 FTP_FLAGS := -s --ftp-ssl --ssl-reqd --insecure
 CURL_UPLOAD := curl ${FTP_FLAGS} ${FTP_AUTH} -T
@@ -25,7 +25,9 @@ clean:
 	rm -f tmp
 
 deploy:
-	@${CURL_UPLOAD} $< ${FTP_BASE}/index.html
+	${CURL_UPLOAD} ${LOCAL_HTML} ${FTP_BASE}/index.html
+	${CURL_UPLOAD} dashboard.css ${FTP_BASE}/dashboard.css
+	${CURL_UPLOAD} dashboard.js ${FTP_BASE}/dashboard.js
 
 deploy-local:
 	cp ${LOCAL_HTML} ${LOCAL_BASEDIR}/index.html

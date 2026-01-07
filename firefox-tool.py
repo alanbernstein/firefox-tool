@@ -17,9 +17,21 @@ time_fmt = '%Y/%m/%d %H:%M:%S'
 now = datetime.datetime.now()
 now_str = datetime.datetime.strftime(now, time_fmt)
 
-# TODO: analyze domains
-# TODO: domain-specific metadata: video length for youtube
-# TODO: work for chrome too
+# Load custom URL display names from config file
+URL_DISPLAY_NAMES = {}
+url_names_file = 'url-display-names.json'
+if os.path.exists(url_names_file):
+    try:
+        with open(url_names_file, 'r') as f:
+            URL_DISPLAY_NAMES = json.load(f)
+    except Exception as e:
+        print(f'Warning: Could not load {url_names_file}: {e}')
+
+def get_display_name_from_url(url):
+    """Get display name from URL using custom mapping from url-display-names.json.
+    Returns the URL itself if no custom mapping is defined.
+    """
+    return URL_DISPLAY_NAMES.get(url, url)
 
 overflow_mode = 'truncate'
 if not os.isatty(1):
@@ -287,12 +299,13 @@ class FirefoxProfile(object):
             self.parent_to_children[row['parent']].append(row['id'])
 
         toolbar_children = self.parent_to_children[TOOLBAR_NODE_ID]
-        for child_id in toolbar_children:
+        toolbar_children_sorted = sorted(toolbar_children, key=lambda x: self.bookmarks_rows_by_id[x]['position'])
+        for child_id in toolbar_children_sorted:
             child_row = self.bookmarks_rows_by_id[child_id]
             # Type 1 = bookmark, Type 2 = folder
             if child_row['type'] == 1 and child_row['fk'] in self.places_rows_by_id:
                 url = self.places_rows_by_id[child_row['fk']]['url']
-                title = child_row['title']
+                title = child_row['title'] if child_row['title'] else get_display_name_from_url(url)
                 # For now, no favicons - just simple links
                 write(f, '<a href="%s" class="quick-bookmark">%s</a>' % (url, title))
 
@@ -403,7 +416,8 @@ class FirefoxProfile(object):
         if row['fk'] in self.places_rows_by_id:
         #if row['type'] == 1
             url = self.places_rows_by_id[row['fk']]['url']
-            write(f, '%s<a href="%s">%s</a>' % ('  ' * depth, url, row['title']))
+            title = row['title'] if row['title'] else get_display_name_from_url(url)
+            write(f, '%s<a href="%s">%s</a>' % ('  ' * depth, url, title))
         else:
             if node_id in self.parent_to_children:
             # if row['type'] == 2
