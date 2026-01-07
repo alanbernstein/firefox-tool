@@ -6,7 +6,9 @@ import os
 import platform
 import shutil
 import sys
+from urllib.parse import urlparse
 
+import base64
 import jinja2
 import lz4.block  # pip install lz4 --user
 import sqlite3
@@ -17,21 +19,42 @@ time_fmt = '%Y/%m/%d %H:%M:%S'
 now = datetime.datetime.now()
 now_str = datetime.datetime.strftime(now, time_fmt)
 
-# Load custom URL display names from config file
-URL_DISPLAY_NAMES = {}
-url_names_file = 'url-display-names.json'
-if os.path.exists(url_names_file):
+# Load configuration
+CONFIG = {
+    'embed_favicons': False,
+    'favicon_dir': 'favicons',
+    'use_url_display_names': True,
+    'url_display_names_file': 'url-display-names.json'
+}
+
+config_file = 'config.json'
+if os.path.exists(config_file):
     try:
-        with open(url_names_file, 'r') as f:
-            URL_DISPLAY_NAMES = json.load(f)
+        with open(config_file, 'r') as f:
+            CONFIG.update(json.load(f))
     except Exception as e:
-        print(f'Warning: Could not load {url_names_file}: {e}')
+        print(f'Warning: Could not load {config_file}: {e}')
+
+# Load custom URL display names from config file (if enabled)
+URL_DISPLAY_NAMES = {}
+if CONFIG['use_url_display_names']:
+    url_names_file = CONFIG['url_display_names_file']
+    if os.path.exists(url_names_file):
+        try:
+            with open(url_names_file, 'r') as f:
+                URL_DISPLAY_NAMES = json.load(f)
+        except Exception as e:
+            print(f'Warning: Could not load {url_names_file}: {e}')
 
 def get_display_name_from_url(url):
     """Get display name from URL using custom mapping from url-display-names.json.
     Returns the URL itself if no custom mapping is defined.
+    Controlled by CONFIG['use_url_display_names'].
     """
-    return URL_DISPLAY_NAMES.get(url, url)
+    if CONFIG['use_url_display_names']:
+        return URL_DISPLAY_NAMES.get(url, url)
+    else:
+        return ''
 
 overflow_mode = 'truncate'
 if not os.isatty(1):
@@ -114,15 +137,22 @@ class ChromeProfile(object):
 
 class FirefoxProfile(object):
     old_device_names = ['Firefox on iPhone']
+
     def __init__(self, profile_path=None):
         self.profile_path = profile_path or self.get_profile_path()
+        # Load config settings
+        self.embed_favicons = CONFIG['embed_favicons']
+        self.favicon_dir = CONFIG['favicon_dir']
         raw = mozlz4_to_text(self.get_session_file())
         self.session = json.loads(raw)
         self.connect_places_db()
         self.connect_sync_db()
+        self.connect_favicons_db()
         self.load_places_queries()
         self.load_sync_queries()
         self.filter_devices(self.old_device_names)
+        # Cache for icon content hash -> filepath to avoid duplicates
+        self.favicon_cache = {}
 
     def filter_devices(self, device_names):
         pass
@@ -156,6 +186,9 @@ class FirefoxProfile(object):
     def get_sync_file(self):
         return self.profile_path + '/synced-tabs.db'
 
+    def get_favicons_file(self):
+        return self.profile_path + '/favicons.sqlite'
+
     def write_session_json(self, fout):
         with open(fout, "w") as f:
             json.dump(self.session)
@@ -175,6 +208,12 @@ class FirefoxProfile(object):
         shutil.copy2(self.get_sync_file(), db_file)
         self.sync_connection = None
         self.sync_connection = sqlite3.connect(db_file)
+
+    def connect_favicons_db(self):
+        db_file = '/tmp/favicons.sqlite'
+        shutil.copy2(self.get_favicons_file(), db_file)
+        self.favicons_connection = None
+        self.favicons_connection = sqlite3.connect(db_file)
 
     def load_places_queries(self):
         cursor = self.places_connection.cursor()
@@ -235,6 +274,167 @@ class FirefoxProfile(object):
         # get tab data
         cursor.execute('select * from tabs;')
         self.tab_rows = cursor.fetchall()
+
+    def get_favicon_data_uri(self, url):
+        """Get favicon data URI for a given URL from favicons.sqlite.
+        Returns None if no favicon is found.
+        Falls back to fuzzy domain matching if exact URL not found.
+        """
+        try:
+            cursor = self.favicons_connection.cursor()
+
+            # Try exact match first
+            cursor.execute('''
+                SELECT i.data, i.width
+                FROM moz_icons i
+                JOIN moz_icons_to_pages itp ON i.id = itp.icon_id
+                JOIN moz_pages_w_icons p ON p.id = itp.page_id
+                WHERE p.page_url = ?
+                ORDER BY i.width DESC
+                LIMIT 1
+            ''', (url,))
+
+            result = cursor.fetchone()
+
+            # If no exact match, try fuzzy match on domain
+            if not result or not result[0]:
+                parsed = urlparse(url)
+                # Match on scheme + netloc (e.g., "http://192.168.86.87:8096")
+                domain_pattern = f'{parsed.scheme}://{parsed.netloc}%'
+
+                # Select most commonly used icon for this domain, then largest
+                cursor.execute('''
+                    SELECT i.data, i.width, COUNT(DISTINCT p.page_url) as url_count
+                    FROM moz_icons i
+                    JOIN moz_icons_to_pages itp ON i.id = itp.icon_id
+                    JOIN moz_pages_w_icons p ON p.id = itp.page_id
+                    WHERE p.page_url LIKE ?
+                    GROUP BY i.data
+                    ORDER BY url_count DESC, i.width DESC
+                    LIMIT 1
+                ''', (domain_pattern,))
+
+                result = cursor.fetchone()
+
+            if not result or not result[0]:
+                return None
+
+            icon_data = result[0]
+
+            # Detect MIME type from file signature
+            if icon_data[:8] == b'\x89PNG\r\n\x1a\n':
+                mime = 'image/png'
+            elif icon_data[:2] == b'\xff\xd8':
+                mime = 'image/jpeg'
+            elif icon_data[:6] in (b'GIF87a', b'GIF89a'):
+                mime = 'image/gif'
+            elif icon_data[:4] == b'\x00\x00\x01\x00':
+                mime = 'image/x-icon'
+            else:
+                mime = 'image/png'  # default
+
+            b64 = base64.b64encode(icon_data).decode('ascii')
+            return f'data:{mime};base64,{b64}'
+        except Exception as e:
+            print(f'Error getting favicon for {url}: {e}')
+            return None
+
+    def save_favicon_to_file(self, url):
+        """Save favicon for a URL to a file.
+        Returns the relative file path if successful, None otherwise.
+        Deduplicates icons by hashing content instead of URL.
+        Falls back to fuzzy domain matching if exact URL not found.
+        """
+        try:
+            cursor = self.favicons_connection.cursor()
+
+            # Try exact match first
+            cursor.execute('''
+                SELECT i.data, i.width
+                FROM moz_icons i
+                JOIN moz_icons_to_pages itp ON i.id = itp.icon_id
+                JOIN moz_pages_w_icons p ON p.id = itp.page_id
+                WHERE p.page_url = ?
+                ORDER BY i.width DESC
+                LIMIT 1
+            ''', (url,))
+
+            result = cursor.fetchone()
+
+            # If no exact match, try fuzzy match on domain
+            if not result or not result[0]:
+                parsed = urlparse(url)
+                # Match on scheme + netloc (e.g., "http://192.168.86.87:8096")
+                domain_pattern = f'{parsed.scheme}://{parsed.netloc}%'
+
+                # Select most commonly used icon for this domain, then largest
+                cursor.execute('''
+                    SELECT i.data, i.width, COUNT(DISTINCT p.page_url) as url_count
+                    FROM moz_icons i
+                    JOIN moz_icons_to_pages itp ON i.id = itp.icon_id
+                    JOIN moz_pages_w_icons p ON p.id = itp.page_id
+                    WHERE p.page_url LIKE ?
+                    GROUP BY i.data
+                    ORDER BY url_count DESC, i.width DESC
+                    LIMIT 1
+                ''', (domain_pattern,))
+
+                result = cursor.fetchone()
+
+            if not result or not result[0]:
+                return None
+
+            icon_data = result[0]
+
+            # Hash the icon content to deduplicate
+            import hashlib
+            content_hash = hashlib.md5(icon_data).hexdigest()
+
+            # Check cache first - if we've already saved this icon, return the path
+            if content_hash in self.favicon_cache:
+                return self.favicon_cache[content_hash]
+
+            # Detect file extension from signature
+            if icon_data[:8] == b'\x89PNG\r\n\x1a\n':
+                ext = 'png'
+            elif icon_data[:2] == b'\xff\xd8':
+                ext = 'jpg'
+            elif icon_data[:6] in (b'GIF87a', b'GIF89a'):
+                ext = 'gif'
+            elif icon_data[:4] == b'\x00\x00\x01\x00':
+                ext = 'ico'
+            else:
+                ext = 'png'  # default
+
+            # Create favicon directory if it doesn't exist
+            os.makedirs(self.favicon_dir, exist_ok=True)
+
+            # Generate filename from content hash (deduplicates identical icons)
+            filename = f'{content_hash}.{ext}'
+            filepath = os.path.join(self.favicon_dir, filename)
+
+            # Save icon data to file (only if not already saved)
+            if not os.path.exists(filepath):
+                with open(filepath, 'wb') as f:
+                    f.write(icon_data)
+
+            # Cache the mapping
+            self.favicon_cache[content_hash] = filepath
+
+            return filepath
+        except Exception as e:
+            print(f'Error saving favicon for {url}: {e}')
+            return None
+
+    def get_favicon(self, url):
+        """Get favicon for a URL, either as data URI or file path.
+        Returns None if no favicon is found.
+        Uses embed_favicons class variable to decide behavior.
+        """
+        if self.embed_favicons:
+            return self.get_favicon_data_uri(url)
+        else:
+            return self.save_favicon_to_file(url)
 
     def multisearch(self, pattern):
         print('not yet implemented')
@@ -306,8 +506,13 @@ class FirefoxProfile(object):
             if child_row['type'] == 1 and child_row['fk'] in self.places_rows_by_id:
                 url = self.places_rows_by_id[child_row['fk']]['url']
                 title = child_row['title'] if child_row['title'] else get_display_name_from_url(url)
-                # For now, no favicons - just simple links
-                write(f, '<a href="%s" class="quick-bookmark">%s</a>' % (url, title))
+
+                # Get favicon (either as data URI or file path)
+                favicon_src = self.get_favicon(url)
+                if favicon_src:
+                    write(f, '<a href="%s" class="quick-bookmark"><img src="%s" class="favicon"> %s</a>' % (url, favicon_src, title))
+                else:
+                    write(f, '<a href="%s" class="quick-bookmark">%s</a>' % (url, title))
 
     def print_bookmarks_tree(self, filename=None, format=None):
         format = format or 'html'

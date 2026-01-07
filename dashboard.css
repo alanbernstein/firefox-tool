@@ -79,6 +79,13 @@ a:visited {
     content: "";
 }
 
+.quick-bookmark .favicon {
+    width: 16px;
+    height: 16px;
+    vertical-align: middle;
+    margin-right: 0.25rem;
+}
+
 /* Search container */
 .search-container {
     margin: 1rem 0;

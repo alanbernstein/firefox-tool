@@ -28,11 +28,20 @@ deploy:
 	${CURL_UPLOAD} ${LOCAL_HTML} ${FTP_BASE}/index.html
 	${CURL_UPLOAD} dashboard.css ${FTP_BASE}/dashboard.css
 	${CURL_UPLOAD} dashboard.js ${FTP_BASE}/dashboard.js
+	@if [ -d favicons ]; then \
+		for file in favicons/*; do \
+			${CURL_UPLOAD} $$file ${FTP_BASE}/favicons/$$(basename $$file); \
+		done; \
+	fi
 
 deploy-local:
 	cp ${LOCAL_HTML} ${LOCAL_BASEDIR}/index.html
 	cp dashboard.css ${LOCAL_BASEDIR}/dashboard.css
 	cp dashboard.js ${LOCAL_BASEDIR}/dashboard.js
+	@if [ -d favicons ]; then \
+		mkdir -p ${LOCAL_BASEDIR}/favicons; \
+		cp -r favicons/* ${LOCAL_BASEDIR}/favicons/; \
+	fi
 
 view:
 	firefox ${REMOTE_URL}/index.html
