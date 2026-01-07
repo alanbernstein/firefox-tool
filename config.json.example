@@ -1,0 +1,10 @@
+{
+  "embed_favicons": false,
+  "favicon_dir": "favicons",
+  "use_url_display_names": true,
+  "url_display_names_file": "url-display-names.json",
+  "synced_devices": {
+    "order": [],
+    "names": {}
+  }
+}

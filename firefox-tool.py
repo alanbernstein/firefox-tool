@@ -24,7 +24,11 @@ CONFIG = {
     'embed_favicons': False,
     'favicon_dir': 'favicons',
     'use_url_display_names': True,
-    'url_display_names_file': 'url-display-names.json'
+    'url_display_names_file': 'url-display-names.json',
+    'synced_devices': {
+        'order': [],  # List of device IDs in desired order
+        'names': {}   # Map of device ID -> custom name
+    }
 }
 
 config_file = 'config.json'
@@ -645,12 +649,16 @@ class FirefoxProfile(object):
         format = format or 'md'
         f = None if not filename else open(filename, 'w')
 
-        # Collect devices first
-        devices = []
+        # Collect devices with IDs
+        devices_by_id = {}
         for row in self.tab_rows:
-            id, record, last_modified = row
+            device_id, record, last_modified = row
             data = json.loads(record)
             device_name = data['clientName']
+
+            # Use custom name from config if available
+            custom_name = CONFIG['synced_devices']['names'].get(device_id, device_name)
+
             if device_name_pattern and device_name_pattern not in device_name.lower():
                 print('omitting tabs from "%s"' % device_name)
                 continue
@@ -663,23 +671,40 @@ class FirefoxProfile(object):
                         continue
                 if skip:
                     continue
-            devices.append((device_name, data['tabs']))
-            print('%4d tabs (%s)' % (len(data['tabs']), device_name))
+
+            devices_by_id[device_id] = {
+                'name': custom_name,
+                'tabs': data['tabs']
+            }
+            print('%4d tabs (%s)' % (len(data['tabs']), custom_name))
+
+        # Sort devices by config order, or by name if not in config
+        device_order = CONFIG['synced_devices']['order']
+        if device_order:
+            # Devices in order, followed by any not in config (sorted by name)
+            ordered_ids = [id for id in device_order if id in devices_by_id]
+            unordered_ids = sorted([id for id in devices_by_id.keys() if id not in device_order],
+                                   key=lambda id: devices_by_id[id]['name'])
+            all_device_ids = ordered_ids + unordered_ids
+        else:
+            # No order specified, sort by name
+            all_device_ids = sorted(devices_by_id.keys(), key=lambda id: devices_by_id[id]['name'])
+
+        devices = [(device_id, devices_by_id[device_id]['name'], devices_by_id[device_id]['tabs'])
+                   for device_id in all_device_ids]
 
         if format == 'html':
             # Generate sub-tabs for devices
             write(f, '<div class="tabs sub-tabs">')
-            for i, (device_name, tabs) in enumerate(devices):
-                device_id = 'synced-' + device_name.replace(' ', '-').replace("'", '').lower()
+            for i, (device_id, device_name, tabs) in enumerate(devices):
                 active_class = ' active' if i == 0 else ''
-                write(f, '  <button class="tab-button%s" data-subtab="%s">%s</button>' % (active_class, device_id, device_name))
+                write(f, '  <button class="tab-button%s" data-subtab="synced-%s">%s</button>' % (active_class, device_id, device_name))
             write(f, '</div>')
 
             # Generate content for each device
-            for i, (device_name, tabs) in enumerate(devices):
-                device_id = 'synced-' + device_name.replace(' ', '-').replace("'", '').lower()
+            for i, (device_id, device_name, tabs) in enumerate(devices):
                 active_class = ' active' if i == 0 else ''
-                write(f, '<div id="%s-content" class="subtab-content%s" data-subtab="%s">' % (device_id, active_class, device_id))
+                write(f, '<div id="synced-%s-content" class="subtab-content%s" data-subtab="synced-%s">' % (device_id, active_class, device_id))
                 write(f, '  <h3>%s (%s tabs)</h3>' % (device_name, len(tabs)))
 
                 for tab in tabs:
@@ -698,7 +723,7 @@ class FirefoxProfile(object):
 
                 write(f, '</div>')
         elif format == 'md':
-            for device_name, tabs in devices:
+            for device_id, device_name, tabs in devices:
                 print('')
                 print('## %s (%s)' % (device_name, now_str))
                 for tab in tabs:
