@@ -40,7 +40,7 @@ a:visited {
 #metadata {
     position: fixed;
     bottom: 1rem;
-    left: 1rem;
+    right: 1rem;
     background: #333;
     border: 1px solid #555;
     padding: 0.5rem 1rem;
@@ -48,6 +48,7 @@ a:visited {
     white-space: nowrap;
     z-index: 100;
     font-size: 0.85rem;
+    text-align: left;
 }
 
 /* Quick bookmarks */

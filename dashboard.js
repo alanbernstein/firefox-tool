@@ -1,7 +1,22 @@
 window.onload = function() {
     let urls = document.querySelectorAll('a:not(.quick-bookmark)');
 
-    // Format timestamp in human-readable form
+    // Format absolute timestamp as Y/M/D H:M:S
+    function formatAbsoluteTimestamp(timestamp) {
+        if (!timestamp || timestamp === 0) {
+            return '';
+        }
+        const date = new Date(timestamp * 1000);
+        const year = date.getFullYear();
+        const month = (date.getMonth() + 1).toString().padStart(2, '0');
+        const day = date.getDate().toString().padStart(2, '0');
+        const hours = date.getHours().toString().padStart(2, '0');
+        const minutes = date.getMinutes().toString().padStart(2, '0');
+        const seconds = date.getSeconds().toString().padStart(2, '0');
+        return `${year}/${month}/${day} ${hours}:${minutes}:${seconds}`;
+    }
+
+    // Format timestamp in human-readable form with precision one unit below order of magnitude
     function formatTimestamp(timestamp) {
         if (!timestamp || timestamp === 0) {
             return 'never';
@@ -15,38 +30,38 @@ window.onload = function() {
         }
 
         if (delta < 60) {
+            // Less than 1 minute: show seconds
             return `${delta}s ago`;
         } else if (delta < 3600) {
+            // Less than 1 hour: show minutes and seconds
             const minutes = Math.floor(delta / 60);
             const seconds = delta % 60;
-            return `${minutes}:${seconds.toString().padStart(2, '0')} ago`;
+            return `${minutes}m ${seconds}s ago`;
         } else if (delta < 86400) {
+            // Less than 1 day: show hours and minutes
             const hours = Math.floor(delta / 3600);
             const minutes = Math.floor((delta % 3600) / 60);
-            const seconds = delta % 60;
-            return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')} ago`;
-        } else {
+            return `${hours}h ${minutes}m ago`;
+        } else if (delta < 604800) {
+            // Less than 1 week: show days and hours
             const days = Math.floor(delta / 86400);
-            if (days === 1) {
-                return '1 day ago';
-            } else if (days < 7) {
-                const hours = Math.floor((delta % 86400) / 3600);
-                if (hours > 0) {
-                    const fraction = Math.floor(hours / 24 * 10);
-                    return `${days}.${fraction} days ago`;
-                } else {
-                    return `${days} days ago`;
-                }
-            } else if (days < 30) {
-                const weeks = (days / 7).toFixed(1);
-                return `${weeks} weeks ago`;
-            } else if (days < 365) {
-                const months = (days / 30).toFixed(1);
-                return `${months} months ago`;
-            } else {
-                const years = (days / 365).toFixed(1);
-                return `${years} years ago`;
-            }
+            const hours = Math.floor((delta % 86400) / 3600);
+            return `${days}d ${hours}h ago`;
+        } else if (delta < 2592000) {
+            // Less than 30 days: show weeks and days
+            const weeks = Math.floor(delta / 604800);
+            const days = Math.floor((delta % 604800) / 86400);
+            return `${weeks}w ${days}d ago`;
+        } else if (delta < 31536000) {
+            // Less than 1 year: show months and weeks
+            const months = Math.floor(delta / 2592000);
+            const weeks = Math.floor((delta % 2592000) / 604800);
+            return `${months}mo ${weeks}w ago`;
+        } else {
+            // 1 year or more: show years and months
+            const years = Math.floor(delta / 31536000);
+            const months = Math.floor((delta % 31536000) / 2592000);
+            return `${years}y ${months}mo ago`;
         }
     }
 
@@ -55,6 +70,7 @@ window.onload = function() {
         document.querySelectorAll('.human-time').forEach(el => {
             const timestamp = parseInt(el.getAttribute('data-timestamp'));
             el.textContent = formatTimestamp(timestamp);
+            el.title = formatAbsoluteTimestamp(timestamp);
         });
     }
 

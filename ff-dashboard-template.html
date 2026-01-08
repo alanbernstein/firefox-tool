@@ -7,9 +7,10 @@
         <script src="dashboard.js"></script>
     </head>
     <body>
-        <!-- Metadata in bottom-left corner -->
+        <!-- Metadata in bottom-right corner -->
         <div id="metadata">
             rendered: <span class="human-time" data-timestamp="{{ render_timestamp }}"></span><br>
+            {% if deployed_timestamp > 0 %}uploaded: <span class="human-time" data-timestamp="{{ deployed_timestamp }}"></span><br>{% endif %}
             last sync: <span class="human-time" data-timestamp="{{ sync_timestamp }}"></span>{{ sync_suffix }}<br>
         </div>
 

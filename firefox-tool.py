@@ -813,6 +813,15 @@ class FirefoxProfile(object):
         # Calculate bookmark count (type 1 = bookmark in bookmarks table)
         bookmark_count = sum(1 for row in self.bookmarks_rows if row[1] == 1)
 
+        # Read deployed timestamp if it exists
+        deployed_timestamp = 0
+        if os.path.exists('deployed.timestamp'):
+            try:
+                with open('deployed.timestamp', 'r') as f:
+                    deployed_timestamp = int(f.read().strip())
+            except Exception as e:
+                print(f'Warning: Could not read deployed.timestamp: {e}')
+
         # render fragments with tab structure
         self.print_session(filename='tmp/tabs.html', format='html')
         self.print_synced_tabs(filename='tmp/synced.html', format='html', omit_name_patterns=self.old_device_names)
@@ -830,6 +839,7 @@ class FirefoxProfile(object):
             render_timestamp=int(now.timestamp()),
             sync_timestamp=self.sync_timestamp if self.sync_timestamp else 0,
             sync_suffix=self.sync_suffix,
+            deployed_timestamp=deployed_timestamp,
             synced_tab_count=synced_tab_count,
             current_tab_count=current_tab_count,
             bookmark_count=bookmark_count

@@ -25,6 +25,7 @@ clean:
 	rm -f tmp
 
 deploy:
+	@date +%s > deployed.timestamp
 	${CURL_UPLOAD} ${LOCAL_HTML} ${FTP_BASE}/index.html
 	${CURL_UPLOAD} dashboard.css ${FTP_BASE}/dashboard.css
 	${CURL_UPLOAD} dashboard.js ${FTP_BASE}/dashboard.js
@@ -35,6 +36,7 @@ deploy:
 	fi
 
 deploy-local:
+	@date +%s > deployed.timestamp
 	cp ${LOCAL_HTML} ${LOCAL_BASEDIR}/index.html
 	cp dashboard.css ${LOCAL_BASEDIR}/dashboard.css
 	cp dashboard.js ${LOCAL_BASEDIR}/dashboard.js
