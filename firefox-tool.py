@@ -539,6 +539,18 @@ class FirefoxProfile(object):
                 os.remove(filename)
             self.print_bookmarks_with_tabs(filename=filename)
 
+    def count_bookmarks_in_folder(self, folder_id):
+        """Recursively count bookmarks (type 1) in a folder and its subfolders"""
+        count = 0
+        if folder_id in self.parent_to_children:
+            for child_id in self.parent_to_children[folder_id]:
+                child_row = self.bookmarks_rows_by_id[child_id]
+                if child_row['type'] == 1:  # bookmark
+                    count += 1
+                elif child_row['type'] == 2:  # folder
+                    count += self.count_bookmarks_in_folder(child_id)
+        return count
+
     def print_bookmarks_with_tabs(self, filename=None):
         """Generate bookmarks with sub-tabs for toolbar folders"""
         f = None if not filename else open(filename, 'w')
@@ -560,14 +572,15 @@ class FirefoxProfile(object):
             child_row = self.bookmarks_rows_by_id[child_id]
             # Type 2 = folder
             if child_row['type'] == 2:
-                folders.append((child_id, child_row['title']))
+                folder_count = self.count_bookmarks_in_folder(child_id)
+                folders.append((child_id, child_row['title'], folder_count))
 
         # Generate sub-tabs for folders
         write(f, '<div class="tabs sub-tabs">')
-        for i, (folder_id, folder_name) in enumerate(folders):
+        for i, (folder_id, folder_name, folder_count) in enumerate(folders):
             folder_slug = folder_name.replace(' ', '-').lower()
             active_class = ' active' if i == 0 else ''
-            write(f, '  <button class="tab-button%s" data-subtab="bookmarks-%s">%s</button>' % (active_class, folder_slug, folder_name))
+            write(f, '  <button class="tab-button%s" data-subtab="bookmarks-%s">%s (%d)</button>' % (active_class, folder_slug, folder_name, folder_count))
         write(f, '</div>')
 
         # Close the file to ensure tabs are written
@@ -575,7 +588,7 @@ class FirefoxProfile(object):
             f.close()
 
         # Generate content for each folder (using append mode since tabs were already written)
-        for i, (folder_id, folder_name) in enumerate(folders):
+        for i, (folder_id, folder_name, folder_count) in enumerate(folders):
             folder_slug = folder_name.replace(' ', '-').lower()
             active_class = ' active' if i == 0 else ''
             f = open(filename, 'a') if filename else None
@@ -698,7 +711,7 @@ class FirefoxProfile(object):
             write(f, '<div class="tabs sub-tabs">')
             for i, (device_id, device_name, tabs) in enumerate(devices):
                 active_class = ' active' if i == 0 else ''
-                write(f, '  <button class="tab-button%s" data-subtab="synced-%s">%s</button>' % (active_class, device_id, device_name))
+                write(f, '  <button class="tab-button%s" data-subtab="synced-%s">%s (%d)</button>' % (active_class, device_id, device_name, len(tabs)))
             write(f, '</div>')
 
             # Generate content for each device
@@ -753,7 +766,7 @@ class FirefoxProfile(object):
             write(f, '<div class="tabs sub-tabs">')
             for wnum, w in enumerate(windows):
                 active_class = ' active' if wnum == 0 else ''
-                write(f, '  <button class="tab-button%s" data-subtab="tabs-window%d">Window %d</button>' % (active_class, wnum, wnum + 1))
+                write(f, '  <button class="tab-button%s" data-subtab="tabs-window%d">Window %d (%d)</button>' % (active_class, wnum, wnum + 1, len(w['tabs'])))
             write(f, '</div>')
 
             # Generate content for each window
@@ -793,6 +806,13 @@ class FirefoxProfile(object):
                         print('      %s%s %s' % (en_num*' ', url, e['title']))
 
     def render_dashboard(self):
+        # Calculate tab counts
+        synced_tab_count = sum(len(json.loads(row[1])['tabs']) for row in self.tab_rows)
+        current_tab_count = sum(len(w['tabs']) for w in self.session['windows'])
+
+        # Calculate bookmark count (type 1 = bookmark in bookmarks table)
+        bookmark_count = sum(1 for row in self.bookmarks_rows if row[1] == 1)
+
         # render fragments with tab structure
         self.print_session(filename='tmp/tabs.html', format='html')
         self.print_synced_tabs(filename='tmp/synced.html', format='html', omit_name_patterns=self.old_device_names)
@@ -809,7 +829,10 @@ class FirefoxProfile(object):
         rendered = template.render(
             render_timestamp=int(now.timestamp()),
             sync_timestamp=self.sync_timestamp if self.sync_timestamp else 0,
-            sync_suffix=self.sync_suffix
+            sync_suffix=self.sync_suffix,
+            synced_tab_count=synced_tab_count,
+            current_tab_count=current_tab_count,
+            bookmark_count=bookmark_count
         )
 
         with open(output_file, 'w') as f:
