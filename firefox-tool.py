@@ -754,6 +754,17 @@ class FirefoxProfile(object):
                     elif overflow_mode == 'wrap':
                         print(line)
 
+    # Extension key for Window Titler (https://github.com/tpamula/webextension-window-titler)
+    WINDOW_TITLER_KEY = 'extension:{35dd5f9a-ca89-4643-b107-f07d09cc94b5}:userWindowTitle'
+
+    def get_window_name(self, window, wnum):
+        """Get window name from Window Titler extension data, or fall back to 'Window N'."""
+        ext_data = window.get('extData', {})
+        raw_title = ext_data.get(self.WINDOW_TITLER_KEY)
+        if raw_title:
+            return json.loads(raw_title)
+        return 'window %d' % (wnum + 1)
+
     def print_session(self, filename=None, format=None):
         format = format or 'md'
         f = None if not filename else open(filename, 'w')
@@ -765,15 +776,17 @@ class FirefoxProfile(object):
             # Generate sub-tabs for windows
             write(f, '<div class="tabs sub-tabs">')
             for wnum, w in enumerate(windows):
+                window_name = self.get_window_name(w, wnum)
                 active_class = ' active' if wnum == 0 else ''
-                write(f, '  <button class="tab-button%s" data-subtab="tabs-window%d">Window %d (%d)</button>' % (active_class, wnum, wnum + 1, len(w['tabs'])))
+                write(f, '  <button class="tab-button%s" data-subtab="tabs-window%d">%s (%d)</button>' % (active_class, wnum, window_name, len(w['tabs'])))
             write(f, '</div>')
 
             # Generate content for each window
             for wnum, w in enumerate(windows):
+                window_name = self.get_window_name(w, wnum)
                 active_class = ' active' if wnum == 0 else ''
                 write(f, '<div id="tabs-window%d-content" class="subtab-content%s" data-subtab="tabs-window%d">' % (wnum, active_class, wnum))
-                write(f, '  <h3>window %d (%s tabs)</h3>' % (wnum + 1, len(w['tabs'])))
+                write(f, '  <h3>%s (%s tabs)</h3>' % (window_name, len(w['tabs'])))
                 for tnum, t in enumerate(w['tabs']):
                     total_tabs += 1
                     e0 = t['entries'][-1]
@@ -783,8 +796,9 @@ class FirefoxProfile(object):
                 write(f, '</div>')
         elif format == 'md':
             for wnum, w in enumerate(windows):
+                window_name = self.get_window_name(w, wnum)
                 print('')
-                print('## window %s (%s tabs)' % (wnum, len(w['tabs'])))
+                print('## %s (%s tabs)' % (window_name, len(w['tabs'])))
                 for tnum, t in enumerate(w['tabs']):
                     total_tabs += 1
                     e0 = t['entries'][-1]
