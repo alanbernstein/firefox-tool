@@ -59,7 +59,7 @@ cd
 
 ## Window Titler extension
 
-Install [https://addons.mozilla.org/en-US/firefox/addon/window-titler/](this plugin) to add title prefixes to Firefox windows. BLAM reads these from the browser state directory.
+Install [https://addons.mozilla.org/en-US/firefox/addon/window-titler/](this plugin) to add title prefixes to Firefox windows. BLAMP reads these from the browser state directory.
 
 # CLI usage
 CLI viewing of data is still there, but I mostly use the webpage now. I don't have a great UI in either for "show results from all sections at once"

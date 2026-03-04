@@ -19,7 +19,7 @@ run:
 	$(MAKE) view-local-deploy
 
 render:
-	python3 firefox-tool.py render
+	python3 blamp.py render
 
 clean:
 	rm -f tmp

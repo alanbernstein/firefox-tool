@@ -104,7 +104,7 @@ def main():
         p.render_dashboard()
 
 def print_usage():
-    print("""firefox-tool
+    print("""blamp
 suggested alias: ff
 
 usage:

@@ -183,3 +183,9 @@ a:visited {
 .subtab-content.active {
     display: block;
 }
+
+.repo-link {
+    position:absolute;
+    top:5;
+    right:5;
+}
